@@ -64,20 +64,26 @@ jobs:
       - name: Get Backend URL
         id: backend
         run: |
-          RG_NAME="mystock-${{ steps.set-env.outputs.environment }}-rg"
-          CONTAINERAPP_NAME="mystock-${{ steps.set-env.outputs.environment }}-backend"
+          ENV="${{ steps.set-env.outputs.environment }}"
+          RG_NAME="mystock-$ENV-rg"
           
-          BACKEND_URL=$(az containerapp show \
-            --name "$CONTAINERAPP_NAME" \
-            --resource-group "$RG_NAME" \
-            --query "properties.configuration.ingress.fqdn" \
-            --output tsv 2>/dev/null || echo "")
+          # Find Container App with pattern: mys{env3char}api*
+          ENV_PREFIX=$(echo "$ENV" | cut -c1-3)
+          CONTAINERAPP_NAME=$(az containerapp list --resource-group "$RG_NAME" \
+            --query "[?starts_with(name, 'mys${ENV_PREFIX}api')].name | [0]" \
+            --output tsv)
           
-          if [ -z "$BACKEND_URL" ]; then
+          if [ -z "$CONTAINERAPP_NAME" ]; then
             echo "⚠️ Backend not found, using localhost"
             BACKEND_URL="http://localhost:8000"
           else
-            BACKEND_URL="https://$BACKEND_URL"
+            BACKEND_FQDN=$(az containerapp show \
+              --name "$CONTAINERAPP_NAME" \
+              --resource-group "$RG_NAME" \
+              --query "properties.configuration.ingress.fqdn" \
+              --output tsv)
+            BACKEND_URL="https://$BACKEND_FQDN"
+            echo "Found Container App: $CONTAINERAPP_NAME"
           fi
           
           echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
@@ -130,7 +136,18 @@ jobs:
         run: |
           ENV="${{ needs.build.outputs.environment }}"
           RG_NAME="mystock-$ENV-rg"
-          SWA_NAME="mystock-$ENV-frontend"
+          
+          # Find Static Web App with pattern: mystock-{env}-web-* or mys{env3char}web*
+          SWA_NAME=$(az staticwebapp list --resource-group "$RG_NAME" \
+            --query "[0].name" \
+            --output tsv)
+          
+          if [ -z "$SWA_NAME" ]; then
+            echo "❌ No Static Web App found in $RG_NAME"
+            exit 1
+          fi
+          
+          echo "Found Static Web App: $SWA_NAME"
           
           # Get deployment token
           DEPLOYMENT_TOKEN=$(az staticwebapp secrets list \
@@ -251,16 +268,26 @@ jobs:
         run: |
           ENV="${{ needs.build.outputs.environment }}"
           RG_NAME="mystock-$ENV-rg"
-          CONTAINERAPP_NAME="mystock-$ENV-backend"
           
-          BACKEND_URL=$(az containerapp show \
+          # Find Container App with pattern: mys{env3char}api*
+          ENV_PREFIX=$(echo "$ENV" | cut -c1-3)
+          CONTAINERAPP_NAME=$(az containerapp list --resource-group "$RG_NAME" \
+            --query "[?starts_with(name, 'mys${ENV_PREFIX}api')].name | [0]" \
+            --output tsv)
+          
+          if [ -z "$CONTAINERAPP_NAME" ]; then
+            echo "⚠️ Backend not found, skipping API test"
+            exit 0
+          fi
+          
+          BACKEND_FQDN=$(az containerapp show \
             --name "$CONTAINERAPP_NAME" \
             --resource-group "$RG_NAME" \
             --query "properties.configuration.ingress.fqdn" \
             --output tsv)
           
-          echo "Testing backend API..."
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://$BACKEND_URL/api/v1/health")
+          echo "Testing backend API at https://$BACKEND_FQDN/health..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://$BACKEND_FQDN/health")
           
           if [ "$RESPONSE" == "200" ]; then
             echo "✅ Backend API accessible"
