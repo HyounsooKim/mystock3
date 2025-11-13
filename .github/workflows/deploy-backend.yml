@@ -229,7 +229,17 @@ jobs:
         run: |
           ENV="${{ github.event.inputs.environment || 'staging' }}"
           RG_NAME="mystock-$ENV-rg"
-          CONTAINERAPP_NAME="mystock-$ENV-backend"
+          
+          # Find Container App with pattern: mys{env3char}api*
+          ENV_PREFIX=$(echo "$ENV" | cut -c1-3)
+          CONTAINERAPP_NAME=$(az containerapp list --resource-group "$RG_NAME" \
+            --query "[?starts_with(name, 'mys${ENV_PREFIX}api')].name | [0]" \
+            --output tsv)
+          
+          if [ -z "$CONTAINERAPP_NAME" ]; then
+            echo "No Container App found for rollback"
+            exit 0
+          fi
           
           PREVIOUS_REVISION=$(az containerapp revision list \
             --name "$CONTAINERAPP_NAME" \
@@ -244,7 +254,13 @@ jobs:
         run: |
           ENV="${{ github.event.inputs.environment || 'staging' }}"
           RG_NAME="mystock-$ENV-rg"
-          CONTAINERAPP_NAME="mystock-$ENV-backend"
+          
+          # Find Container App with pattern: mys{env3char}api*
+          ENV_PREFIX=$(echo "$ENV" | cut -c1-3)
+          CONTAINERAPP_NAME=$(az containerapp list --resource-group "$RG_NAME" \
+            --query "[?starts_with(name, 'mys${ENV_PREFIX}api')].name | [0]" \
+            --output tsv)
+          
           PREVIOUS_REVISION="${{ steps.previous.outputs.previous_revision }}"
           
           echo "Rolling back to: $PREVIOUS_REVISION"
