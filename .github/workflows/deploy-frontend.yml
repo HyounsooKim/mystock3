@@ -93,7 +93,7 @@ jobs:
         working-directory: ./frontend
         env:
           NODE_ENV: production
-          VITE_API_BASE_URL: ${{ steps.backend.outputs.backend_url }}
+          VITE_API_BASE_URL: ${{ steps.backend.outputs.backend_url }}/api/v1
           VITE_ENVIRONMENT: ${{ steps.set-env.outputs.environment }}
         run: |
           echo "Building with API URL: $VITE_API_BASE_URL"
