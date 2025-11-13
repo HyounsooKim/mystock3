@@ -161,6 +161,28 @@ jobs:
           echo "containerapp_name=$CONTAINERAPP_NAME" >> $GITHUB_OUTPUT
           echo "Found Container App: $CONTAINERAPP_NAME in $RG_NAME"
       
+      - name: Configure ACR authentication
+        run: |
+          RG_NAME="${{ steps.containerapp.outputs.resource_group }}"
+          CONTAINERAPP_NAME="${{ steps.containerapp.outputs.containerapp_name }}"
+          
+          # Get Container App's managed identity
+          IDENTITY_ID=$(az containerapp show \
+            --name "$CONTAINERAPP_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "identity.principalId" \
+            --output tsv)
+          
+          echo "Container App Identity: $IDENTITY_ID"
+          
+          # Grant AcrPull role to Container App identity
+          az role assignment create \
+            --assignee "$IDENTITY_ID" \
+            --role "AcrPull" \
+            --scope "/subscriptions/${{ env.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG_NAME/providers/Microsoft.ContainerRegistry/registries/${{ env.REGISTRY_NAME }}"
+          
+          echo "✅ ACR authentication configured"
+      
       - name: Deploy to Container Apps
         run: |
           RG_NAME="${{ steps.containerapp.outputs.resource_group }}"
@@ -171,6 +193,13 @@ jobs:
           IMAGE_TAG=$(echo "$IMAGE_TAGS" | head -n 1)
           
           echo "Deploying $IMAGE_TAG to $CONTAINERAPP_NAME"
+          
+          # Update with ACR registry configuration
+          az containerapp registry set \
+            --name "$CONTAINERAPP_NAME" \
+            --resource-group "$RG_NAME" \
+            --server "${{ env.REGISTRY_NAME }}.azurecr.io" \
+            --identity "system"
           
           az containerapp update \
             --name "$CONTAINERAPP_NAME" \
