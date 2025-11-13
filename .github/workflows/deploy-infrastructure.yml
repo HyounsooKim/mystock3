@@ -1,0 +1,233 @@
+name: Deploy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      location:
+        description: 'Azure region'
+        required: true
+        default: 'koreacentral'
+
+env:
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  validate:
+    name: Validate Bicep Templates
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Install Bicep CLI
+        run: az bicep install
+      
+      - name: Validate main template
+        run: |
+          az bicep build --file infrastructure/bicep/main.bicep
+      
+      - name: Validate module templates
+        run: |
+          for bicep_file in infrastructure/bicep/*.bicep; do
+            echo "Validating $bicep_file"
+            az bicep build --file "$bicep_file"
+          done
+      
+      - name: Run what-if analysis
+        run: |
+          az deployment sub what-if \
+            --name "mystock-${{ github.event.inputs.environment }}-whatif" \
+            --location ${{ github.event.inputs.location }} \
+            --template-file infrastructure/bicep/main.bicep \
+            --parameters environment=${{ github.event.inputs.environment }} \
+                        location=${{ github.event.inputs.location }}
+
+  deploy:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Set Azure Subscription
+        run: |
+          az account set --subscription ${{ env.AZURE_SUBSCRIPTION_ID }}
+          az account show
+      
+      - name: Deploy Infrastructure
+        id: deploy
+        run: |
+          az deployment sub create \
+            --name "mystock-${{ github.event.inputs.environment }}-$(date +%Y%m%d%H%M%S)" \
+            --location ${{ github.event.inputs.location }} \
+            --template-file infrastructure/bicep/main.bicep \
+            --parameters environment=${{ github.event.inputs.environment }} \
+                        location=${{ github.event.inputs.location }} \
+            --verbose
+      
+      - name: Get Deployment Outputs
+        id: outputs
+        run: |
+          DEPLOYMENT_NAME=$(az deployment sub list \
+            --query "[?contains(name, 'mystock-${{ github.event.inputs.environment }}')].name | [0]" \
+            --output tsv)
+          
+          echo "Deployment: $DEPLOYMENT_NAME"
+          
+          # Get resource group name
+          RG_NAME=$(az deployment sub show \
+            --name "$DEPLOYMENT_NAME" \
+            --query "properties.outputs.resourceGroupName.value" \
+            --output tsv)
+          
+          echo "resource_group=$RG_NAME" >> $GITHUB_OUTPUT
+          
+          # Get Cosmos DB endpoint
+          COSMOS_ENDPOINT=$(az deployment sub show \
+            --name "$DEPLOYMENT_NAME" \
+            --query "properties.outputs.cosmosDbEndpoint.value" \
+            --output tsv)
+          
+          echo "cosmos_endpoint=$COSMOS_ENDPOINT" >> $GITHUB_OUTPUT
+      
+      - name: Configure Key Vault Secrets
+        run: |
+          RG_NAME="${{ steps.outputs.outputs.resource_group }}"
+          KV_NAME=$(az keyvault list \
+            --resource-group "$RG_NAME" \
+            --query "[0].name" \
+            --output tsv)
+          
+          echo "Configuring secrets in Key Vault: $KV_NAME"
+          
+          # Set Alpha Vantage API Key
+          az keyvault secret set \
+            --vault-name "$KV_NAME" \
+            --name "alpha-vantage-api-key" \
+            --value "${{ secrets.ALPHA_VANTAGE_API_KEY }}"
+          
+          # Set JWT Secret Key
+          az keyvault secret set \
+            --vault-name "$KV_NAME" \
+            --name "jwt-secret-key" \
+            --value "${{ secrets.JWT_SECRET_KEY }}"
+      
+      - name: Initialize Cosmos DB
+        run: |
+          RG_NAME="${{ steps.outputs.outputs.resource_group }}"
+          COSMOS_NAME=$(az cosmosdb list \
+            --resource-group "$RG_NAME" \
+            --query "[0].name" \
+            --output tsv)
+          
+          echo "Cosmos DB Account: $COSMOS_NAME"
+          
+          # Create database and containers (idempotent)
+          az cosmosdb sql database create \
+            --account-name "$COSMOS_NAME" \
+            --resource-group "$RG_NAME" \
+            --name "mystock-db" \
+            --throughput 400 || true
+          
+          # Create users container
+          az cosmosdb sql container create \
+            --account-name "$COSMOS_NAME" \
+            --resource-group "$RG_NAME" \
+            --database-name "mystock-db" \
+            --name "users" \
+            --partition-key-path "/user_id" \
+            --throughput 400 || true
+          
+          # Create watchlist container
+          az cosmosdb sql container create \
+            --account-name "$COSMOS_NAME" \
+            --resource-group "$RG_NAME" \
+            --database-name "mystock-db" \
+            --name "watchlist" \
+            --partition-key-path "/user_id" \
+            --throughput 400 || true
+          
+          # Create portfolio container
+          az cosmosdb sql container create \
+            --account-name "$COSMOS_NAME" \
+            --resource-group "$RG_NAME" \
+            --database-name "mystock-db" \
+            --name "portfolio" \
+            --partition-key-path "/user_id" \
+            --throughput 400 || true
+      
+      - name: Deployment Summary
+        run: |
+          echo "## Infrastructure Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Location**: ${{ github.event.inputs.location }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Resource Group**: ${{ steps.outputs.outputs.resource_group }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Cosmos DB**: ${{ steps.outputs.outputs.cosmos_endpoint }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Infrastructure deployed successfully" >> $GITHUB_STEP_SUMMARY
+
+  verify:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: List deployed resources
+        run: |
+          RG_NAME="mystock-${{ github.event.inputs.environment }}-rg"
+          
+          echo "## Deployed Resources" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
+          az resource list \
+            --resource-group "$RG_NAME" \
+            --output table >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Check resource health
+        run: |
+          RG_NAME="mystock-${{ github.event.inputs.environment }}-rg"
+          
+          # Check Cosmos DB status
+          COSMOS_STATUS=$(az cosmosdb show \
+            --resource-group "$RG_NAME" \
+            --name "mystock-${{ github.event.inputs.environment }}-cosmos" \
+            --query "provisioningState" \
+            --output tsv)
+          
+          echo "Cosmos DB Status: $COSMOS_STATUS"
+          
+          if [ "$COSMOS_STATUS" != "Succeeded" ]; then
+            echo "❌ Cosmos DB deployment failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          echo "✅ All resources healthy" >> $GITHUB_STEP_SUMMARY

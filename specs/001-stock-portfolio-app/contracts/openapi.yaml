@@ -1,0 +1,1129 @@
+openapi: 3.0.3
+info:
+  title: MyStock API
+  description: |
+    RESTful API for MyStock stock portfolio management application.
+    
+    ## Features
+    - User authentication with JWT tokens
+    - Watchlist management with drag-and-drop ordering
+    - Portfolio tracking across three categories (장기/단기/정찰병)
+    - Real-time stock data integration with Alpha Vantage API
+    - Dark mode preference persistence
+    
+    ## Authentication
+    Most endpoints require authentication via JWT bearer token.
+    Obtain token via `/api/v1/auth/login` endpoint.
+    
+  version: 1.0.0
+  contact:
+    name: MyStock API Support
+    email: support@mystock3.example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.mystock3.example.com/api/v1
+    description: Production server
+  - url: https://api-staging.mystock3.example.com/api/v1
+    description: Staging server
+  - url: http://localhost:8000/api/v1
+    description: Local development server
+
+tags:
+  - name: auth
+    description: Authentication and authorization operations
+  - name: users
+    description: User profile management
+  - name: watchlist
+    description: Watchlist CRUD operations
+  - name: portfolio
+    description: Portfolio management operations
+  - name: stocks
+    description: Stock market data retrieval
+
+security:
+  - BearerAuth: []
+
+paths:
+  # Authentication Endpoints
+  /auth/signup:
+    post:
+      tags:
+        - auth
+      summary: Create new user account
+      description: Register a new user with email and password
+      operationId: signup
+      security: []  # No auth required
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Email already registered"
+                error_code: "DUPLICATE_EMAIL"
+                timestamp: "2025-11-05T10:00:00Z"
+
+  /auth/login:
+    post:
+      tags:
+        - auth
+      summary: Authenticate user
+      description: Login with email and password, receive JWT token (7-day expiration)
+      operationId: login
+      security: []  # No auth required
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Invalid email or password"
+                error_code: "INVALID_CREDENTIALS"
+                timestamp: "2025-11-05T10:00:00Z"
+
+  /auth/logout:
+    post:
+      tags:
+        - auth
+      summary: Logout user
+      description: Invalidate current JWT token (client-side token removal)
+      operationId: logout
+      responses:
+        '204':
+          description: Logout successful
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # User Endpoints
+  /users/me:
+    get:
+      tags:
+        - users
+      summary: Get current user profile
+      description: Retrieve authenticated user's profile information
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      tags:
+        - users
+      summary: Update user preferences
+      description: Update user preferences (dark mode, language)
+      operationId: updateUserPreferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPreferencesUpdate'
+      responses:
+        '200':
+          description: Preferences updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # Watchlist Endpoints
+  /watchlist:
+    get:
+      tags:
+        - watchlist
+      summary: Get user's watchlist
+      description: Retrieve all watchlist items for authenticated user, ordered by display_order
+      operationId: getWatchlist
+      responses:
+        '200':
+          description: Watchlist retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WatchlistItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - watchlist
+      summary: Add stock to watchlist
+      description: Add a new stock to user's watchlist
+      operationId: addToWatchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WatchlistItemCreate'
+      responses:
+        '201':
+          description: Stock added to watchlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchlistItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Stock already in watchlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "이미 관심종목에 추가된 종목입니다"
+                error_code: "DUPLICATE_STOCK"
+                timestamp: "2025-11-05T10:00:00Z"
+
+  /watchlist/{item_id}:
+    get:
+      tags:
+        - watchlist
+      summary: Get watchlist item
+      description: Retrieve a specific watchlist item by ID
+      operationId: getWatchlistItem
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+      responses:
+        '200':
+          description: Watchlist item retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchlistItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - watchlist
+      summary: Update watchlist item
+      description: Update memo or display order for a watchlist item
+      operationId: updateWatchlistItem
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WatchlistItemUpdate'
+      responses:
+        '200':
+          description: Watchlist item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchlistItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - watchlist
+      summary: Remove stock from watchlist
+      description: Delete a watchlist item
+      operationId: deleteWatchlistItem
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+      responses:
+        '204':
+          description: Watchlist item deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /watchlist/reorder:
+    post:
+      tags:
+        - watchlist
+      summary: Reorder watchlist items
+      description: Update display order of multiple watchlist items (drag-and-drop)
+      operationId: reorderWatchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WatchlistReorderRequest'
+      responses:
+        '200':
+          description: Watchlist reordered
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WatchlistItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # Portfolio Endpoints
+  /portfolio:
+    get:
+      tags:
+        - portfolio
+      summary: Get user's portfolio
+      description: Retrieve all portfolio entries for authenticated user, optionally filtered by category
+      operationId: getPortfolio
+      parameters:
+        - name: category
+          in: query
+          description: Filter by investment category
+          required: false
+          schema:
+            $ref: '#/components/schemas/PortfolioCategory'
+      responses:
+        '200':
+          description: Portfolio retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PortfolioEntryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - portfolio
+      summary: Add stock to portfolio
+      description: Add a new stock position to user's portfolio (max 10 total entries)
+      operationId: addToPortfolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortfolioEntryCreate'
+      responses:
+        '201':
+          description: Stock added to portfolio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioEntryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Stock already in portfolio or limit reached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                duplicate:
+                  value:
+                    detail: "이미 해당 카테고리에 등록된 종목입니다"
+                    error_code: "DUPLICATE_STOCK"
+                    timestamp: "2025-11-05T10:00:00Z"
+                limit_reached:
+                  value:
+                    detail: "최대 10개 종목까지 등록 가능"
+                    error_code: "PORTFOLIO_LIMIT_REACHED"
+                    timestamp: "2025-11-05T10:00:00Z"
+
+  /portfolio/{entry_id}:
+    get:
+      tags:
+        - portfolio
+      summary: Get portfolio entry
+      description: Retrieve a specific portfolio entry with calculated metrics
+      operationId: getPortfolioEntry
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '200':
+          description: Portfolio entry retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioEntryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - portfolio
+      summary: Update portfolio entry
+      description: Update purchase price or quantity for a portfolio entry
+      operationId: updatePortfolioEntry
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortfolioEntryUpdate'
+      responses:
+        '200':
+          description: Portfolio entry updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioEntryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - portfolio
+      summary: Remove stock from portfolio
+      description: Delete a portfolio entry
+      operationId: deletePortfolioEntry
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '204':
+          description: Portfolio entry deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Stock Data Endpoints
+  /stocks/search:
+    get:
+      tags:
+        - stocks
+      summary: Search stocks
+      description: Search for stocks by symbol or company name
+      operationId: searchStocks
+      parameters:
+        - name: q
+          in: query
+          description: Search query (symbol or company name)
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            example: "AAPL"
+        - name: limit
+          in: query
+          description: Maximum number of results
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StockSearchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /stocks/{symbol}/quote:
+    get:
+      tags:
+        - stocks
+      summary: Get stock quote
+      description: |
+        Retrieve current stock quote data. 
+        Data is cached for 1 minute to minimize external API calls.
+      operationId: getStockQuote
+      parameters:
+        - name: symbol
+          in: path
+          description: Stock ticker symbol
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z]{1,5}$'
+            example: "AAPL"
+      responses:
+        '200':
+          description: Stock quote retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockQuote'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Stock symbol not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "종목을 찾을 수 없음"
+                error_code: "STOCK_NOT_FOUND"
+                timestamp: "2025-11-05T10:00:00Z"
+        '429':
+          description: API rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "API rate limit exceeded, please retry later"
+                error_code: "RATE_LIMIT_EXCEEDED"
+                timestamp: "2025-11-05T10:00:00Z"
+        '503':
+          description: External stock API unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Stock data service temporarily unavailable"
+                error_code: "EXTERNAL_API_ERROR"
+                timestamp: "2025-11-05T10:00:00Z"
+
+  /stocks/{symbol}/history:
+    get:
+      tags:
+        - stocks
+      summary: Get historical stock data
+      description: Retrieve historical price data for charting (candlestick)
+      operationId: getStockHistory
+      parameters:
+        - name: symbol
+          in: path
+          description: Stock ticker symbol
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z]{1,5}$'
+        - name: period
+          in: query
+          description: Time period for historical data
+          required: false
+          schema:
+            type: string
+            enum: [1D, 5D, 1M, 3M, 6M, 1Y, 5Y]
+            default: 1M
+      responses:
+        '200':
+          description: Historical data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /auth/login endpoint (7-day expiration)
+
+  parameters:
+    ItemId:
+      name: item_id
+      in: path
+      description: Watchlist item UUID
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    EntryId:
+      name: entry_id
+      in: path
+      description: Portfolio entry UUID
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    # Auth Schemas
+    SignupRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          minLength: 6
+          description: Password (minimum 6 characters)
+          example: "password123"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          example: "password123"
+
+    AuthResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - expires_in
+        - user
+      properties:
+        access_token:
+          type: string
+          description: JWT bearer token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          enum: [bearer]
+          example: "bearer"
+        expires_in:
+          type: integer
+          description: Token expiration in seconds (7 days = 604800)
+          example: 604800
+        user:
+          $ref: '#/components/schemas/UserResponse'
+
+    # User Schemas
+    UserResponse:
+      type: object
+      required:
+        - id
+        - email
+        - created_at
+        - preferences
+      properties:
+        id:
+          type: string
+          format: email
+          example: "user@example.com"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-05T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-11-05T10:00:00Z"
+        preferences:
+          $ref: '#/components/schemas/UserPreferences'
+
+    UserPreferences:
+      type: object
+      properties:
+        dark_mode:
+          type: boolean
+          default: false
+          example: true
+        language:
+          type: string
+          default: "ko"
+          example: "ko"
+
+    UserPreferencesUpdate:
+      type: object
+      properties:
+        preferences:
+          $ref: '#/components/schemas/UserPreferences'
+
+    # Watchlist Schemas
+    WatchlistItemCreate:
+      type: object
+      required:
+        - symbol
+      properties:
+        symbol:
+          type: string
+          pattern: '^[A-Z]{1,5}$'
+          description: Stock ticker symbol
+          example: "AAPL"
+        memo:
+          type: string
+          maxLength: 50
+          description: User's note about the stock (max 50 characters)
+          example: "매수 타이밍 지켜보는 중"
+
+    WatchlistItemUpdate:
+      type: object
+      properties:
+        memo:
+          type: string
+          maxLength: 50
+          example: "매수 완료"
+        display_order:
+          type: integer
+          minimum: 1
+          example: 3
+
+    WatchlistItemResponse:
+      type: object
+      required:
+        - id
+        - user_id
+        - symbol
+        - company_name
+        - display_order
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        user_id:
+          type: string
+          format: email
+          example: "user@example.com"
+        symbol:
+          type: string
+          example: "AAPL"
+        company_name:
+          type: string
+          example: "Apple Inc."
+        memo:
+          type: string
+          example: "매수 타이밍 지켜보는 중"
+        display_order:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-11-05T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-11-05T11:00:00Z"
+        current_price:
+          type: number
+          format: double
+          description: Current stock price (from cache/API)
+          example: 178.32
+        change_percent:
+          type: number
+          format: double
+          description: Price change percentage
+          example: 1.22
+
+    WatchlistReorderRequest:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: Array of item IDs in new order
+          items:
+            type: string
+            format: uuid
+          example:
+            - "550e8400-e29b-41d4-a716-446655440003"
+            - "550e8400-e29b-41d4-a716-446655440001"
+            - "550e8400-e29b-41d4-a716-446655440002"
+
+    # Portfolio Schemas
+    PortfolioCategory:
+      type: string
+      enum: ["장기", "단기", "정찰병"]
+      description: |
+        Investment category:
+        - 장기: Long-term investment
+        - 단기: Short-term trading
+        - 정찰병: Trial/Scout position
+
+    PortfolioEntryCreate:
+      type: object
+      required:
+        - symbol
+        - category
+        - purchase_price
+        - quantity
+      properties:
+        symbol:
+          type: string
+          pattern: '^[A-Z]{1,5}$'
+          example: "TSLA"
+        category:
+          $ref: '#/components/schemas/PortfolioCategory'
+        purchase_price:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Average purchase price per share (USD)
+          example: 245.50
+        quantity:
+          type: integer
+          minimum: 1
+          description: Number of shares owned
+          example: 10
+
+    PortfolioEntryUpdate:
+      type: object
+      properties:
+        purchase_price:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 250.00
+        quantity:
+          type: integer
+          minimum: 1
+          example: 15
+
+    PortfolioEntryResponse:
+      type: object
+      required:
+        - id
+        - user_id
+        - symbol
+        - company_name
+        - category
+        - purchase_price
+        - quantity
+        - current_price
+        - market_value
+        - profit_loss
+        - profit_loss_percent
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "660e8400-e29b-41d4-a716-446655440002"
+        user_id:
+          type: string
+          format: email
+          example: "user@example.com"
+        symbol:
+          type: string
+          example: "TSLA"
+        company_name:
+          type: string
+          example: "Tesla, Inc."
+        category:
+          $ref: '#/components/schemas/PortfolioCategory'
+        purchase_price:
+          type: number
+          format: double
+          description: Average purchase price per share
+          example: 245.50
+        quantity:
+          type: integer
+          example: 10
+        current_price:
+          type: number
+          format: double
+          description: Latest stock price (calculated)
+          example: 258.75
+        market_value:
+          type: number
+          format: double
+          description: Current total value (calculated)
+          example: 2587.50
+        profit_loss:
+          type: number
+          format: double
+          description: Total profit/loss amount (calculated)
+          example: 132.50
+        profit_loss_percent:
+          type: number
+          format: double
+          description: Percentage gain/loss (calculated)
+          example: 5.40
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-10-01T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-11-05T10:00:00Z"
+
+    # Stock Data Schemas
+    StockSearchResult:
+      type: object
+      required:
+        - symbol
+        - name
+      properties:
+        symbol:
+          type: string
+          example: "AAPL"
+        name:
+          type: string
+          example: "Apple Inc."
+        type:
+          type: string
+          example: "Common Stock"
+        region:
+          type: string
+          example: "United States"
+        currency:
+          type: string
+          example: "USD"
+
+    StockQuote:
+      type: object
+      required:
+        - symbol
+        - company_name
+        - current_price
+        - change
+        - change_percent
+        - open
+        - high
+        - low
+        - volume
+        - last_updated
+        - currency
+      properties:
+        symbol:
+          type: string
+          example: "AAPL"
+        company_name:
+          type: string
+          example: "Apple Inc."
+        current_price:
+          type: number
+          format: double
+          example: 178.32
+        change:
+          type: number
+          format: double
+          description: Price change from previous close
+          example: 2.15
+        change_percent:
+          type: number
+          format: double
+          description: Percentage change
+          example: 1.22
+        open:
+          type: number
+          format: double
+          example: 176.50
+        high:
+          type: number
+          format: double
+          example: 179.00
+        low:
+          type: number
+          format: double
+          example: 176.20
+        volume:
+          type: integer
+          format: int64
+          example: 58392010
+        last_updated:
+          type: string
+          format: date-time
+          description: API data timestamp
+          example: "2025-11-05T11:30:00Z"
+        currency:
+          type: string
+          example: "USD"
+
+    StockHistoryResponse:
+      type: object
+      required:
+        - symbol
+        - period
+        - data
+      properties:
+        symbol:
+          type: string
+          example: "AAPL"
+        period:
+          type: string
+          example: "1M"
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockHistoryPoint'
+
+    StockHistoryPoint:
+      type: object
+      required:
+        - date
+        - open
+        - high
+        - low
+        - close
+        - volume
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2025-11-05"
+        open:
+          type: number
+          format: double
+          example: 176.50
+        high:
+          type: number
+          format: double
+          example: 179.00
+        low:
+          type: number
+          format: double
+          example: 176.20
+        close:
+          type: number
+          format: double
+          example: 178.32
+        volume:
+          type: integer
+          format: int64
+          example: 58392010
+
+    # Error Schemas
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+        - error_code
+        - timestamp
+      properties:
+        detail:
+          type: string
+          description: Human-readable error message
+          example: "Invalid request parameters"
+        error_code:
+          type: string
+          description: Machine-readable error code
+          example: "VALIDATION_ERROR"
+        timestamp:
+          type: string
+          format: date-time
+          description: Error occurrence timestamp
+          example: "2025-11-05T10:00:00Z"
+        field_errors:
+          type: object
+          description: Field-specific validation errors
+          additionalProperties:
+            type: string
+          example:
+            email: "Invalid email format"
+            password: "Password must be at least 6 characters"
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            detail: "Validation error"
+            error_code: "VALIDATION_ERROR"
+            timestamp: "2025-11-05T10:00:00Z"
+            field_errors:
+              symbol: "Symbol must be uppercase letters only"
+
+    Unauthorized:
+      description: Authentication required or token invalid/expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            detail: "Authentication required"
+            error_code: "UNAUTHORIZED"
+            timestamp: "2025-11-05T10:00:00Z"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            detail: "Resource not found"
+            error_code: "NOT_FOUND"
+            timestamp: "2025-11-05T10:00:00Z"

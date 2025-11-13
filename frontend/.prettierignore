@@ -1,0 +1,28 @@
+# Prettier Ignore File for MyStock Frontend
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+
+# Coverage reports
+coverage/
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Generated files
+*.d.ts
+
+# Test results
+test-results/
+playwright-report/
+
+# Minified files
+*.min.js
+*.min.css

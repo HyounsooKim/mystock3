@@ -1,0 +1,280 @@
+// Tabler Theme Configuration for MyStock
+// Based on Tabler v1.0.0-beta
+
+// Import Tabler variables and mixins
+// Note: Install @tabler/core if needed: npm install @tabler/core
+
+// Color Palette
+$primary: #206bc4;
+$secondary: #6c757d;
+$success: #2fb344;
+$info: #4299e1;
+$warning: #f76707;
+$danger: #d63939;
+$light: #f8f9fa;
+$dark: #1e293b;
+
+// Dark Mode Colors
+$dark-bg-primary: #1a1d2e;
+$dark-bg-secondary: #2d2d2d;
+$dark-bg-tertiary: #3a3a3a;
+$dark-text-primary: #e2e8f0;
+$dark-text-secondary: #94a3b8;
+$dark-border: #475569;
+
+// Light Mode Colors
+$light-bg-primary: #ffffff;
+$light-bg-secondary: #f8f9fa;
+$light-bg-tertiary: #e9ecef;
+$light-text-primary: #1e293b;
+$light-text-secondary: #64748b;
+$light-border: #dee2e6;
+
+// Spacing
+$spacer: 1rem;
+$spacers: (
+  0: 0,
+  1: ($spacer * 0.25),
+  2: ($spacer * 0.5),
+  3: $spacer,
+  4: ($spacer * 1.5),
+  5: ($spacer * 3),
+);
+
+// Typography
+$font-family-sans-serif: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+$font-size-base: 0.9375rem;
+$font-size-sm: 0.75rem;
+$font-size-lg: 1.25rem;
+$line-height-base: 1.4285714;
+
+// Border Radius
+$border-radius: 4px;
+$border-radius-sm: 2px;
+$border-radius-lg: 8px;
+
+// Shadows
+$box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+$box-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.15);
+
+// Transitions
+$transition-base: all 0.2s ease-in-out;
+
+// Card
+$card-padding: 1.5rem;
+$card-border-width: 1px;
+$card-border-radius: $border-radius;
+
+// Button
+$btn-padding-y: 0.5rem;
+$btn-padding-x: 1rem;
+$btn-border-radius: $border-radius;
+
+// Input
+$input-padding-y: 0.5rem;
+$input-padding-x: 0.75rem;
+$input-border-radius: $border-radius;
+$input-border-width: 1px;
+
+// Table
+$table-cell-padding: 0.75rem;
+$table-striped-bg-factor: 0.05;
+
+// CSS Variables for Theme Switching
+:root {
+  // Colors
+  --color-primary: #{$primary};
+  --color-secondary: #{$secondary};
+  --color-success: #{$success};
+  --color-info: #{$info};
+  --color-warning: #{$warning};
+  --color-danger: #{$danger};
+  
+  // Light Mode (Default)
+  --color-bg: #{$light-bg-primary};
+  --color-bg-secondary: #{$light-bg-secondary};
+  --color-bg-tertiary: #{$light-bg-tertiary};
+  --color-text: #{$light-text-primary};
+  --color-text-secondary: #{$light-text-secondary};
+  --color-border: #{$light-border};
+  
+  // Shadows
+  --shadow-sm: #{$box-shadow};
+  --shadow-lg: #{$box-shadow-lg};
+  
+  // Stock-specific colors
+  --color-profit: #{$success};
+  --color-loss: #{$danger};
+  --color-neutral: #{$secondary};
+}
+
+// Dark Mode
+.theme-dark {
+  --color-bg: #{$dark-bg-primary};
+  --color-bg-secondary: #{$dark-bg-secondary};
+  --color-bg-tertiary: #{$dark-bg-tertiary};
+  --color-text: #{$dark-text-primary};
+  --color-text-secondary: #{$dark-text-secondary};
+  --color-border: #{$dark-border};
+  
+  // Adjust shadows for dark mode
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+// Global Styles
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: $font-family-sans-serif;
+  font-size: $font-size-base;
+  line-height: $line-height-base;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  transition: $transition-base;
+}
+
+// Utility Classes
+.text-primary { color: var(--color-primary) !important; }
+.text-secondary { color: var(--color-text-secondary) !important; }
+.text-success { color: var(--color-success) !important; }
+.text-danger { color: var(--color-danger) !important; }
+.text-warning { color: var(--color-warning) !important; }
+.text-info { color: var(--color-info) !important; }
+
+.bg-primary { background-color: var(--color-primary) !important; }
+.bg-secondary { background-color: var(--color-bg-secondary) !important; }
+.bg-success { background-color: var(--color-success) !important; }
+.bg-danger { background-color: var(--color-danger) !important; }
+
+// Stock-specific utility classes
+.profit {
+  color: var(--color-profit);
+  font-weight: 600;
+}
+
+.loss {
+  color: var(--color-loss);
+  font-weight: 600;
+}
+
+.neutral {
+  color: var(--color-neutral);
+}
+
+// Card Component
+.card {
+  background-color: var(--color-bg);
+  border: $card-border-width solid var(--color-border);
+  border-radius: $card-border-radius;
+  padding: $card-padding;
+  box-shadow: var(--shadow-sm);
+  transition: $transition-base;
+  
+  &:hover {
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+// Button Component
+.btn {
+  display: inline-block;
+  padding: $btn-padding-y $btn-padding-x;
+  font-size: $font-size-base;
+  border-radius: $btn-border-radius;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: $transition-base;
+  text-align: center;
+  
+  &-primary {
+    background-color: var(--color-primary);
+    color: white;
+    
+    &:hover {
+      opacity: 0.9;
+    }
+  }
+  
+  &-secondary {
+    background-color: var(--color-secondary);
+    color: white;
+    
+    &:hover {
+      opacity: 0.9;
+    }
+  }
+  
+  &-danger {
+    background-color: var(--color-danger);
+    color: white;
+    
+    &:hover {
+      opacity: 0.9;
+    }
+  }
+}
+
+// Input Component
+.form-control {
+  display: block;
+  width: 100%;
+  padding: $input-padding-y $input-padding-x;
+  font-size: $font-size-base;
+  line-height: $line-height-base;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border: $input-border-width solid var(--color-border);
+  border-radius: $input-border-radius;
+  transition: $transition-base;
+  
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 0.2rem rgba(32, 107, 196, 0.25);
+  }
+}
+
+// Table Component
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  
+  th, td {
+    padding: $table-cell-padding;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+  
+  th {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    font-size: $font-size-sm;
+    text-transform: uppercase;
+  }
+  
+  tbody tr:hover {
+    background-color: var(--color-bg-secondary);
+  }
+}
+
+// Spacing Utilities
+@each $size, $value in $spacers {
+  .m-#{$size} { margin: $value !important; }
+  .mt-#{$size} { margin-top: $value !important; }
+  .mb-#{$size} { margin-bottom: $value !important; }
+  .ml-#{$size} { margin-left: $value !important; }
+  .mr-#{$size} { margin-right: $value !important; }
+  .mx-#{$size} { margin-left: $value !important; margin-right: $value !important; }
+  .my-#{$size} { margin-top: $value !important; margin-bottom: $value !important; }
+  
+  .p-#{$size} { padding: $value !important; }
+  .pt-#{$size} { padding-top: $value !important; }
+  .pb-#{$size} { padding-bottom: $value !important; }
+  .pl-#{$size} { padding-left: $value !important; }
+  .pr-#{$size} { padding-right: $value !important; }
+  .px-#{$size} { padding-left: $value !important; padding-right: $value !important; }
+  .py-#{$size} { padding-top: $value !important; padding-bottom: $value !important; }
+}

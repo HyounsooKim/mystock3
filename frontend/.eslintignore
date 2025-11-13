@@ -1,0 +1,28 @@
+# ESLint Ignore File for MyStock Frontend
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+
+# Coverage reports
+coverage/
+
+# Test results
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Generated files
+*.d.ts
+
+# Configuration files
+vite.config.ts
+playwright.config.ts
+
+# Minified files
+*.min.js
+*.min.css

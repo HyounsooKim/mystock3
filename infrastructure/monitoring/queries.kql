@@ -1,0 +1,242 @@
+// MyStock Application - Log Analytics Queries
+// These queries can be used in Azure Log Analytics Workspace or Application Insights
+
+// ============================================================================
+// ERROR TRACKING
+// ============================================================================
+
+// Top 10 Exceptions by Count (Last 24 Hours)
+exceptions
+| where timestamp > ago(24h)
+| summarize count() by type, outerMessage
+| top 10 by count_ desc
+| project ExceptionType=type, Message=outerMessage, Count=count_
+
+// Failed API Requests (4xx and 5xx)
+requests
+| where timestamp > ago(24h)
+| where success == false
+| where resultCode >= 400
+| summarize count() by resultCode, name, operation_Name
+| order by count_ desc
+| project StatusCode=resultCode, Endpoint=name, Operation=operation_Name, Count=count_
+
+// Error Rate Over Time (1-hour bins)
+requests
+| where timestamp > ago(7d)
+| summarize Total=count(), Errors=countif(success == false) by bin(timestamp, 1h)
+| extend ErrorRate = round(100.0 * Errors / Total, 2)
+| project timestamp, Total, Errors, ErrorRate
+| order by timestamp desc
+
+// ============================================================================
+// PERFORMANCE METRICS
+// ============================================================================
+
+// API Latency Percentiles (Last 24 Hours)
+requests
+| where timestamp > ago(24h)
+| summarize 
+    p50=percentile(duration, 50),
+    p90=percentile(duration, 90),
+    p95=percentile(duration, 95),
+    p99=percentile(duration, 99),
+    avg=avg(duration),
+    max=max(duration)
+    by name
+| order by p95 desc
+| project 
+    Endpoint=name,
+    P50_ms=round(p50, 2),
+    P90_ms=round(p90, 2),
+    P95_ms=round(p95, 2),
+    P99_ms=round(p99, 2),
+    Avg_ms=round(avg, 2),
+    Max_ms=round(max, 2)
+
+// Slow Requests (>1 second)
+requests
+| where timestamp > ago(24h)
+| where duration > 1000
+| project 
+    timestamp,
+    name,
+    duration,
+    resultCode,
+    success,
+    operation_Id
+| order by duration desc
+| take 100
+
+// Request Rate Over Time (5-minute bins)
+requests
+| where timestamp > ago(24h)
+| summarize RequestCount=count() by bin(timestamp, 5m)
+| project timestamp, RequestCount
+| render timechart
+
+// ============================================================================
+// ALPHA VANTAGE API METRICS
+// ============================================================================
+
+// Alpha Vantage API Call Count by Function
+dependencies
+| where name == "AlphaVantageAPI"
+| where timestamp > ago(24h)
+| extend ApiFunction = tostring(customDimensions.function)
+| summarize CallCount=count() by ApiFunction
+| order by CallCount desc
+
+// Alpha Vantage API Success Rate
+dependencies
+| where name == "AlphaVantageAPI"
+| where timestamp > ago(24h)
+| summarize 
+    Total=count(),
+    Successful=countif(success == true),
+    Failed=countif(success == false)
+| extend SuccessRate = round(100.0 * Successful / Total, 2)
+| project Total, Successful, Failed, SuccessRate
+
+// Alpha Vantage Rate Limit Events
+traces
+| where timestamp > ago(7d)
+| where message contains "AlphaVantage.RateLimit"
+| extend Function = tostring(customDimensions.function)
+| summarize RateLimitHits=count() by bin(timestamp, 1h), Function
+| order by timestamp desc
+
+// Alpha Vantage API Latency Over Time
+dependencies
+| where name == "AlphaVantageAPI"
+| where timestamp > ago(24h)
+| extend ApiFunction = tostring(customDimensions.function)
+| summarize AvgDuration=avg(duration) by bin(timestamp, 15m), ApiFunction
+| render timechart
+
+// ============================================================================
+// CUSTOM METRICS
+// ============================================================================
+
+// Cache Hit Rate (Stock Data)
+customMetrics
+| where name contains "CacheHit" or name contains "CacheMiss"
+| where timestamp > ago(24h)
+| summarize Value=sum(value) by name
+| extend MetricType = case(
+    name contains "Hit", "Hits",
+    name contains "Miss", "Misses",
+    "Other"
+)
+| summarize Total=sum(Value) by MetricType
+| extend HitRate = round(100.0 * todouble(Total) / (toscalar(customMetrics 
+    | where timestamp > ago(24h)
+    | where name contains "CacheHit" or name contains "CacheMiss"
+    | summarize sum(value))), 2)
+| project MetricType, Total, HitRate
+
+// Database RU Consumption
+customMetrics
+| where name contains "CosmosDB.RU"
+| where timestamp > ago(24h)
+| summarize TotalRU=sum(value) by bin(timestamp, 1h)
+| render timechart
+
+// ============================================================================
+// USER ACTIVITY
+// ============================================================================
+
+// Active Users (Last 24 Hours)
+requests
+| where timestamp > ago(24h)
+| extend UserId = tostring(customDimensions.user_id)
+| where isnotempty(UserId)
+| summarize RequestCount=count() by UserId
+| summarize ActiveUsers=count()
+
+// Most Popular Endpoints
+requests
+| where timestamp > ago(7d)
+| where success == true
+| summarize CallCount=count() by name
+| order by CallCount desc
+| take 20
+
+// User Journey Analysis (Session Timeline)
+requests
+| where timestamp > ago(1d)
+| extend UserId = tostring(customDimensions.user_id)
+| where isnotempty(UserId)
+| project timestamp, UserId, Endpoint=name, Duration=duration
+| order by UserId, timestamp asc
+| take 1000
+
+// ============================================================================
+// AVAILABILITY & HEALTH
+// ============================================================================
+
+// Application Uptime (Last 7 Days)
+requests
+| where timestamp > ago(7d)
+| summarize 
+    TotalRequests=count(),
+    SuccessfulRequests=countif(success == true)
+    by bin(timestamp, 1h)
+| extend Uptime = round(100.0 * SuccessfulRequests / TotalRequests, 2)
+| project timestamp, TotalRequests, SuccessfulRequests, Uptime
+| order by timestamp desc
+
+// Health Check Endpoint Status
+requests
+| where name == "GET /health"
+| where timestamp > ago(24h)
+| summarize SuccessCount=countif(success == true), FailureCount=countif(success == false) by bin(timestamp, 5m)
+| render timechart
+
+// Response Time Degradation Alert
+requests
+| where timestamp > ago(1h)
+| summarize AvgDuration=avg(duration) by bin(timestamp, 5m)
+| where AvgDuration > 500 // Alert if average > 500ms
+| project timestamp, AvgDuration
+
+// ============================================================================
+// SECURITY & COMPLIANCE
+// ============================================================================
+
+// Failed Authentication Attempts
+requests
+| where timestamp > ago(24h)
+| where name contains "auth/login"
+| where success == false
+| extend ClientIP = tostring(customDimensions.client_ip)
+| summarize FailedAttempts=count() by ClientIP
+| where FailedAttempts > 5
+| order by FailedAttempts desc
+
+// Rate Limiting Events
+traces
+| where timestamp > ago(24h)
+| where message contains "rate limit"
+| extend ClientIP = tostring(customDimensions.client_ip)
+| summarize RateLimitHits=count() by bin(timestamp, 1h), ClientIP
+| order by RateLimitHits desc
+
+// ============================================================================
+// COST OPTIMIZATION
+// ============================================================================
+
+// Total Data Ingestion Volume
+union *
+| where timestamp > ago(7d)
+| summarize DataVolume=count() by bin(timestamp, 1d), $table
+| order by timestamp desc
+
+// Most Expensive Queries (by RU consumption)
+customMetrics
+| where name contains "CosmosDB.RU"
+| where timestamp > ago(24h)
+| extend Operation = tostring(customDimensions.operation)
+| summarize TotalRU=sum(value) by Operation
+| order by TotalRU desc
+| take 10

@@ -1,0 +1,26 @@
+# MyStock Backend - Python Dependencies
+# FastAPI and Core
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# HTTP Client
+aiohttp==3.9.1
+
+# Azure Services
+azure-cosmos==4.5.1
+azure-identity==1.15.0
+
+# Application Insights (optional - install for telemetry)
+# pip install opencensus-ext-azure
+# opencensus-ext-azure==1.1.13
+
+# Azure Key Vault (optional - install for secret management)
+# pip install azure-keyvault-secrets
+# azure-keyvault-secrets==4.7.0

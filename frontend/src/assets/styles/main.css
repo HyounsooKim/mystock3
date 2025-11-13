@@ -1,0 +1,45 @@
+/* Main CSS for MyStock Application */
+
+:root {
+  /* Light mode colors */
+  --color-bg: #ffffff;
+  --color-text: #000000;
+  --color-primary: #0066cc;
+  --color-secondary: #6c757d;
+  --color-success: #28a745;
+  --color-danger: #dc3545;
+  --color-warning: #ffc107;
+  --color-info: #17a2b8;
+  --color-border: #dee2e6;
+}
+
+.theme-dark {
+  /* Dark mode colors */
+  --color-bg: #1a1a1a;
+  --color-text: #ffffff;
+  --color-primary: #3399ff;
+  --color-secondary: #adb5bd;
+  --color-success: #2ecc71;
+  --color-danger: #e74c3c;
+  --color-warning: #f39c12;
+  --color-info: #3498db;
+  --color-border: #495057;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#app {
+  min-height: 100vh;
+}

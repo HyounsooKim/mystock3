@@ -1,0 +1,279 @@
+name: Deploy Frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+
+env:
+  NODE_VERSION: '20'
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  build:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set environment from branch
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            ENV="staging"
+          else
+            ENV="dev"
+          fi
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "Deploying to: $ENV"
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Get Backend URL
+        id: backend
+        run: |
+          RG_NAME="mystock-${{ steps.set-env.outputs.environment }}-rg"
+          CONTAINERAPP_NAME="mystock-${{ steps.set-env.outputs.environment }}-backend"
+          
+          BACKEND_URL=$(az containerapp show \
+            --name "$CONTAINERAPP_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv 2>/dev/null || echo "")
+          
+          if [ -z "$BACKEND_URL" ]; then
+            echo "⚠️ Backend not found, using localhost"
+            BACKEND_URL="http://localhost:8000"
+          else
+            BACKEND_URL="https://$BACKEND_URL"
+          fi
+          
+          echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
+          echo "Backend API: $BACKEND_URL"
+      
+      - name: Build for production
+        working-directory: ./frontend
+        env:
+          NODE_ENV: production
+          VITE_API_BASE_URL: ${{ steps.backend.outputs.backend_url }}
+          VITE_ENVIRONMENT: ${{ steps.set-env.outputs.environment }}
+        run: |
+          echo "Building with API URL: $VITE_API_BASE_URL"
+          npm run build
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ steps.set-env.outputs.environment }}
+          path: frontend/dist/
+          retention-days: 7
+
+  deploy:
+    name: Deploy to Static Web Apps
+    runs-on: ubuntu-latest
+    needs: build
+    environment: ${{ needs.build.outputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-${{ needs.build.outputs.environment }}
+          path: frontend/dist/
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Set Azure Subscription
+        run: |
+          az account set --subscription ${{ env.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Get Static Web App details
+        id: swa
+        run: |
+          ENV="${{ needs.build.outputs.environment }}"
+          RG_NAME="mystock-$ENV-rg"
+          SWA_NAME="mystock-$ENV-frontend"
+          
+          # Get deployment token
+          DEPLOYMENT_TOKEN=$(az staticwebapp secrets list \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "properties.apiKey" \
+            --output tsv)
+          
+          echo "::add-mask::$DEPLOYMENT_TOKEN"
+          echo "deployment_token=$DEPLOYMENT_TOKEN" >> $GITHUB_OUTPUT
+          echo "swa_name=$SWA_NAME" >> $GITHUB_OUTPUT
+          echo "resource_group=$RG_NAME" >> $GITHUB_OUTPUT
+      
+      - name: Deploy to Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa.outputs.deployment_token }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "frontend/dist"
+          skip_app_build: true
+          skip_api_build: true
+      
+      - name: Get Static Web App URL
+        id: url
+        run: |
+          SWA_NAME="${{ steps.swa.outputs.swa_name }}"
+          RG_NAME="${{ steps.swa.outputs.resource_group }}"
+          
+          DEFAULT_HOSTNAME=$(az staticwebapp show \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "defaultHostname" \
+            --output tsv)
+          
+          echo "hostname=$DEFAULT_HOSTNAME" >> $GITHUB_OUTPUT
+          echo "Frontend URL: https://$DEFAULT_HOSTNAME"
+      
+      - name: Health Check
+        run: |
+          HOSTNAME="${{ steps.url.outputs.hostname }}"
+          
+          echo "Waiting for deployment to propagate..."
+          sleep 30
+          
+          echo "Performing health check..."
+          for i in {1..10}; do
+            if curl -f "https://$HOSTNAME" > /dev/null 2>&1; then
+              echo "✅ Health check passed"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 10
+          done
+          
+          echo "❌ Health check failed after 10 attempts"
+          exit 1
+      
+      - name: Deployment Summary
+        run: |
+          echo "## Frontend Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ needs.build.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Static Web App**: ${{ steps.swa.outputs.swa_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: https://${{ steps.url.outputs.hostname }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Frontend deployed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Visit https://${{ steps.url.outputs.hostname }}" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test login and registration" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verify watchlist and portfolio features" >> $GITHUB_STEP_SUMMARY
+
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: [build, deploy]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Get Frontend URL
+        id: url
+        run: |
+          ENV="${{ needs.build.outputs.environment }}"
+          RG_NAME="mystock-$ENV-rg"
+          SWA_NAME="mystock-$ENV-frontend"
+          
+          HOSTNAME=$(az staticwebapp show \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "defaultHostname" \
+            --output tsv)
+          
+          echo "hostname=$HOSTNAME" >> $GITHUB_OUTPUT
+      
+      - name: Test Homepage
+        run: |
+          HOSTNAME="${{ steps.url.outputs.hostname }}"
+          
+          echo "Testing homepage..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://$HOSTNAME")
+          
+          if [ "$RESPONSE" == "200" ]; then
+            echo "✅ Homepage loaded successfully"
+          else
+            echo "❌ Homepage returned HTTP $RESPONSE"
+            exit 1
+          fi
+      
+      - name: Test API Connectivity
+        run: |
+          ENV="${{ needs.build.outputs.environment }}"
+          RG_NAME="mystock-$ENV-rg"
+          CONTAINERAPP_NAME="mystock-$ENV-backend"
+          
+          BACKEND_URL=$(az containerapp show \
+            --name "$CONTAINERAPP_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv)
+          
+          echo "Testing backend API..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "https://$BACKEND_URL/api/v1/health")
+          
+          if [ "$RESPONSE" == "200" ]; then
+            echo "✅ Backend API accessible"
+          else
+            echo "❌ Backend API returned HTTP $RESPONSE"
+            exit 1
+          fi
+      
+      - name: Smoke Test Summary
+        if: success()
+        run: |
+          echo "## Smoke Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All smoke tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend homepage accessible" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend API health check passed" >> $GITHUB_STEP_SUMMARY
