@@ -1,7 +1,6 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import apiClient from '../api/client'
-import { handleApiError } from '../utils/errorHandler'
 import type { User } from '../types'
 
 export const useThemeStore = defineStore('theme', () => {

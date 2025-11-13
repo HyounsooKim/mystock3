@@ -239,6 +239,7 @@ test.describe('Dark Mode Persistence', () => {
     await page.evaluate(() => {
       localStorage.setItem('darkMode', 'true')
       // Manually apply theme
+      // const themeAppliedBeforeRender = document.documentElement.classList.contains('theme-dark')
       document.documentElement.classList.add('theme-dark')
       document.documentElement.setAttribute('data-bs-theme', 'dark')
     })

@@ -1,5 +1,5 @@
 import { test, expect } from '../helpers/auth'
-import { generateTestEmail, generateTestPassword, mockApiResponse } from '../helpers/auth'
+import { generateTestEmail, generateTestPassword } from '../helpers/auth'
 
 test.describe('Dark Mode Toggle', () => {
   const testEmail = generateTestEmail()

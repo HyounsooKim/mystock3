@@ -257,11 +257,11 @@ test.describe('Edit Watchlist Memo', () => {
   })
 
   test('should not save if memo is unchanged', async ({ page }) => {
-    let patchCalled = false
+    // let patchCalled = false
     
     await page.route(/\/api\/v1\/watchlist\/item-1$/, async (route) => {
       if (route.request().method() === 'PATCH') {
-        patchCalled = true
+        // patchCalled = true
         await route.fulfill({
           status: 200,
           contentType: 'application/json',

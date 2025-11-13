@@ -127,9 +127,9 @@ test.describe('Portfolio Heatmap Visualization', () => {
 
     // Verify ECharts tooltip is visible
     // Note: ECharts tooltips are dynamically created divs
-    const tooltip = page.locator('.echarts-tooltip')
     // Tooltip visibility depends on hover position and ECharts rendering
     // This is a visual verification test
+    // const tooltip = page.locator('.echarts-tooltip')
   })
 
   test('should size rectangles proportional to market value', async ({ page }) => {
