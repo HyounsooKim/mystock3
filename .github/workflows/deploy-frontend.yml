@@ -240,7 +240,18 @@ jobs:
         run: |
           ENV="${{ needs.build.outputs.environment }}"
           RG_NAME="mystock-$ENV-rg"
-          SWA_NAME="mystock-$ENV-frontend"
+          
+          # Find Static Web App dynamically
+          SWA_NAME=$(az staticwebapp list --resource-group "$RG_NAME" \
+            --query "[0].name" \
+            --output tsv)
+          
+          if [ -z "$SWA_NAME" ]; then
+            echo "❌ No Static Web App found in $RG_NAME"
+            exit 1
+          fi
+          
+          echo "Found Static Web App: $SWA_NAME"
           
           HOSTNAME=$(az staticwebapp show \
             --name "$SWA_NAME" \
