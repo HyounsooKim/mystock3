@@ -143,11 +143,23 @@ jobs:
       - name: Get Container App details
         id: containerapp
         run: |
-          RG_NAME="mystock-${{ steps.set-env.outputs.environment }}-rg"
-          CONTAINERAPP_NAME="mystock-${{ steps.set-env.outputs.environment }}-backend"
+          ENV="${{ steps.set-env.outputs.environment }}"
+          RG_NAME="mystock-$ENV-rg"
+          
+          # Find Container App with pattern: mys{env3char}api*
+          ENV_PREFIX=$(echo "$ENV" | cut -c1-3)
+          CONTAINERAPP_NAME=$(az containerapp list --resource-group "$RG_NAME" \
+            --query "[?starts_with(name, 'mys${ENV_PREFIX}api')].name | [0]" \
+            --output tsv)
+          
+          if [ -z "$CONTAINERAPP_NAME" ]; then
+            echo "❌ No Container App found matching pattern: mys${ENV_PREFIX}api*"
+            exit 1
+          fi
           
           echo "resource_group=$RG_NAME" >> $GITHUB_OUTPUT
           echo "containerapp_name=$CONTAINERAPP_NAME" >> $GITHUB_OUTPUT
+          echo "Found Container App: $CONTAINERAPP_NAME in $RG_NAME"
       
       - name: Deploy to Container Apps
         run: |
