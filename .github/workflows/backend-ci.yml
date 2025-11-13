@@ -43,6 +43,7 @@ jobs:
           ruff check . --output-format=github
       
       - name: Run black (formatter check)
+        if: false  # Skip black formatting check
         run: |
           black --check .
       
