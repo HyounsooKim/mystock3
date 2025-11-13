@@ -162,6 +162,7 @@ jobs:
           echo "Found Container App: $CONTAINERAPP_NAME in $RG_NAME"
       
       - name: Configure ACR authentication
+        if: false  # Skip - ACR pull permissions already granted manually
         run: |
           RG_NAME="${{ steps.containerapp.outputs.resource_group }}"
           CONTAINERAPP_NAME="${{ steps.containerapp.outputs.containerapp_name }}"
