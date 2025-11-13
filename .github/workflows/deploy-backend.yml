@@ -165,7 +165,10 @@ jobs:
         run: |
           RG_NAME="${{ steps.containerapp.outputs.resource_group }}"
           CONTAINERAPP_NAME="${{ steps.containerapp.outputs.containerapp_name }}"
-          IMAGE_TAG="${{ needs.build.outputs.image-tag }}"
+          IMAGE_TAGS="${{ needs.build.outputs.image-tag }}"
+          
+          # Get first tag only (tags are separated by newlines)
+          IMAGE_TAG=$(echo "$IMAGE_TAGS" | head -n 1)
           
           echo "Deploying $IMAGE_TAG to $CONTAINERAPP_NAME"
           
